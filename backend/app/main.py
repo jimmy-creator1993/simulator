@@ -6,12 +6,14 @@ import uuid
 
 from ag_ui_langgraph import add_langgraph_fastapi_endpoint
 from copilotkit import CopilotKitMiddleware, LangGraphAGUIAgent
-from deepagents import create_deep_agent
+from deepagents import CompiledSubAgent, create_deep_agent
 from fastapi import FastAPI
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.types import interrupt
 
 
 SUBAGENT_MENTION = re.compile(r"^\s*@(researcher|reviewer)(?:\s+|$)")
@@ -77,6 +79,60 @@ model = ChatOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
 )
 
+
+class ReviewState(MessagesState):
+    focus: str
+
+
+REVIEW_FOCUS = {
+    "risk": "风险与遗漏",
+    "experience": "用户体验",
+    "cost": "成本与复杂度",
+}
+
+
+def choose_review_focus(state: ReviewState) -> dict[str, str]:
+    choice = interrupt({
+        "type": "review_focus",
+        "message": "这次希望审阅员重点检查什么？",
+        "options": [
+            {"id": option_id, "label": label}
+            for option_id, label in REVIEW_FOCUS.items()
+        ],
+    })
+    focus = choice.get("focus") if isinstance(choice, dict) else choice
+    if focus not in REVIEW_FOCUS:
+        raise ValueError("无效的审阅重点")
+    return {"focus": focus}
+
+
+async def review_with_focus(state: ReviewState) -> dict:
+    task = next(
+        (message.content for message in reversed(state["messages"])
+         if isinstance(message, HumanMessage)),
+        "",
+    )
+    answer = await model.ainvoke([
+        SystemMessage(content=(
+            "你是审阅子 agent。根据用户指定的重点审阅任务，输出简短的工作结果："
+            "检查维度、发现的问题、建议。不要输出内部推理过程。"
+            f"本次审阅重点：{REVIEW_FOCUS[state['focus']]}。"
+        )),
+        HumanMessage(content=str(task)),
+    ])
+    return {"messages": [answer]}
+
+
+review_graph = (
+    StateGraph(ReviewState)
+    .add_node("choose_focus", choose_review_focus)
+    .add_node("review", review_with_focus)
+    .add_edge(START, "choose_focus")
+    .add_edge("choose_focus", "review")
+    .add_edge("review", END)
+    .compile()
+)
+
 agent = create_deep_agent(
     model=model,
     name="main-agent",
@@ -99,15 +155,11 @@ agent = create_deep_agent(
             ),
             "tools": [],
         },
-        {
-            "name": "reviewer",
-            "description": "审阅一个方案，找出重要问题、权衡与可执行的改进建议。",
-            "system_prompt": (
-                "你是审阅子 agent。只处理收到的任务。输出简短的工作摘要："
-                "检查维度、发现的问题、建议。不要输出内部推理过程。"
-            ),
-            "tools": [],
-        },
+        CompiledSubAgent(
+            name="reviewer",
+            description="审阅一个方案，找出重要问题、权衡与可执行的改进建议。",
+            runnable=review_graph,
+        ),
     ],
 )
 

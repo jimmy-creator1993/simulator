@@ -13,6 +13,7 @@ body { font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: 
 .status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 99px; padding: 6px 9px; font-size: 11px; font-weight: 700; }
 .status.running { color: #9b6d2e; background: #fff0d5; }
 .status.done { color: #367454; background: #e3f2e6; }
+.status.waiting { color: #876523; background: #fff0d5; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .card-section { padding: 12px 16px 14px; }
 .card-label { color: #789284; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
@@ -21,6 +22,17 @@ body { font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: 
 .result-section { border-top: 1px solid #e4eee5; padding-top: 10px; }
 .result-section summary { cursor: pointer; color: #2f7050; font-size: 12px; font-weight: 700; }
 .result-section p { margin-top: 9px; color: #4b5f52; }
+.card-choice { padding: 11px 16px; border-top: 1px solid #e4eee5; color: #526e58; font-size: 12px; }
+.card-interrupt { padding: 0 16px 16px; }
+.interrupt-card { padding: 16px; border: 1px solid #c9dfce; border-radius: 14px; background: #f1f8f2; box-shadow: 0 4px 14px #26452d12; }
+.interrupt-kicker { margin: 0 0 9px; color: #367454; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.interrupt-card strong { display: block; font-size: 14px; line-height: 1.5; }
+.interrupt-options { display: grid; gap: 8px; margin: 15px 0; }
+.interrupt-option { width: 100%; padding: 10px 12px; border: 1px solid #dbe8dc; border-radius: 9px; background: white; text-align: left; cursor: pointer; font-size: 13px; }
+.interrupt-option:hover { border-color: #4b9770; background: #eaf5ed; }
+.interrupt-option:disabled { opacity: .5; cursor: not-allowed; }
+.interrupt-pending { margin: 0; color: #367454; font-size: 12px; }
+.interrupt-error { color: #ad3d36; font-size: 12px; }
 .mention-input { position: relative; width: 100%; }
 .mention-menu { position: absolute; z-index: 50; left: 24px; right: 24px; bottom: calc(100% + 8px); padding: 8px; border: 1px solid #dbe8dc; border-radius: 14px; background: white; box-shadow: 0 12px 34px #25473426; }
 .mention-menu-title { padding: 5px 9px 8px; color: #819687; font-size: 10px; font-weight: 800; letter-spacing: .08em; }

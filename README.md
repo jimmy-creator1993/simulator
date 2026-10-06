@@ -15,4 +15,6 @@
 
 在输入框开头输入 `@` 可选择 `researcher` 或 `reviewer`。选择后继续输入任务并发送；后端会直接生成对应的 `task` 调用，确保调用用户指定的子 agent。没有 `@` 时仍由主 agent 自行决定是否委派。
 
+`reviewer` 是 LangGraph 子图。发送 `@reviewer 请审阅一个待上线的聊天应用方案` 后，子图会暂停并在子 agent 卡片内显示选择题；选择审阅重点后，CopilotKit 恢复同一线程，子 agent 完成审阅，再由主 agent 回复。当前选择记录保存在本页状态中，刷新页面不会保留该记录。
+
 此原型的会话状态使用内存 checkpointer，服务器重启后不会保留。
