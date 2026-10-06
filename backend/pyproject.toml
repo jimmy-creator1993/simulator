@@ -1,0 +1,19 @@
+[project]
+name = "deep-agent-chat"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "ag-ui-langgraph",
+  "copilotkit",
+  "deepagents",
+  "fastapi",
+  "langchain-openai",
+  "uvicorn[standard]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
