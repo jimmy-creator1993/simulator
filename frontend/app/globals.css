@@ -56,12 +56,18 @@ body { font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: 
 .workflow-steps { list-style: none; margin: 0; padding: 0; }
 .workflow-step { position: relative; min-height: 66px; }
 .workflow-step:not(:last-child)::after { content: ""; position: absolute; top: 32px; bottom: -2px; left: 15px; width: 1px; background: #dce8dd; }
+.workflow-substep { margin-left: 20px; }
+.workflow-substep::before { content: ""; position: absolute; left: -20px; top: 15px; width: 20px; height: 1px; background: #dce8dd; }
+.workflow-substep .workflow-node { flex-basis: 25px; width: 25px; height: 25px; font-size: 11px; }
+.workflow-substep:not(:last-child)::after { left: 12px; top: 27px; }
 .workflow-step-button { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 0 0 20px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .workflow-step-button:hover .workflow-step-copy strong, .workflow-step-button.selected .workflow-step-copy strong { color: #2e7952; }
 .workflow-node { display: grid; flex: 0 0 31px; width: 31px; height: 31px; place-items: center; border: 1px solid #d5e1d7; border-radius: 50%; background: #f3f6f3; color: #8b9b8d; font-size: 12px; font-weight: 800; }
 .workflow-step.complete .workflow-node { border-color: #c7e4ce; background: #e5f4e8; color: #348253; }
 .workflow-step.running .workflow-node { border-color: #ead5a6; background: #fff2d5; color: #a87930; }
 .workflow-step.waiting .workflow-node { border-color: #eacb83; background: #fff1c8; color: #966518; }
+.workflow-step.failed .workflow-node { border-color: #ebc3be; background: #fce9e6; color: #af4137; }
+.workflow-step.skipped .workflow-node { color: #929b94; background: #f0f2f0; }
 .workflow-step-copy { display: flex; flex-direction: column; gap: 5px; padding-top: 2px; }
 .workflow-step-copy strong { font-size: 13px; }
 .workflow-step-copy small { color: #849489; font-size: 11px; }

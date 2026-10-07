@@ -4,17 +4,28 @@ import os
 import re
 import uuid
 from contextvars import ContextVar
+from typing import Annotated, NotRequired
 
 from ag_ui_langgraph import add_langgraph_fastapi_endpoint
 from copilotkit import CopilotKitMiddleware, LangGraphAGUIAgent
-from deepagents import CompiledSubAgent, create_deep_agent
+from deepagents import CompiledSubAgent, DeepAgentState, create_deep_agent
 from fastapi import FastAPI
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
+from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import interrupt
+
+from app.workflow import (
+    WorkflowSnapshot,
+    WorkflowStep,
+    apublish_workflow,
+    publish_workflow,
+    start_workflow,
+    update_workflow,
+)
 
 
 SUBAGENT_MENTION = re.compile(r"^\s*@(researcher|reviewer)(?:\s+|$)")
@@ -106,8 +117,14 @@ model = ChatOpenAI(
 )
 
 
+class MainState(DeepAgentState):
+    # Deep Agents must not copy a subagent's workflow into the main agent state.
+    workflow: NotRequired[Annotated[WorkflowSnapshot, PrivateStateAttr]]
+
+
 class ReviewState(MessagesState):
     focus: str
+    workflow: NotRequired[WorkflowSnapshot]
 
 
 REVIEW_FOCUS = {
@@ -117,15 +134,30 @@ REVIEW_FOCUS = {
 }
 
 
-def choose_review_focus(state: ReviewState) -> dict[str, str]:
+def review_step(step_id: str, title: str, status: str, detail: str) -> WorkflowStep:
+    return {"id": step_id, "title": title, "status": status, "detail": detail}
+
+
+def plan_review(state: ReviewState) -> dict:
+    """A subagent can publish its plan after any amount of prior graph work."""
     task_id = CURRENT_TASK_ID.get()
     if not task_id:
-        raise RuntimeError("审阅任务缺少调用 ID，无法安全地展示选择卡")
+        raise RuntimeError("审阅任务缺少调用 ID，无法关联工作流")
+    workflow = start_workflow(task_id, [
+        review_step("focus", "确定审阅重点", "waiting", "等待用户选择审阅方向。"),
+    ])
+    publish_workflow(workflow)
+    return {"workflow": workflow}
+
+
+def choose_review_focus(state: ReviewState) -> dict:
+    task_id = state["workflow"]["task_id"]
     choice = interrupt({
         "version": 1,
         "type": "single_select",
         "agent_id": "reviewer",
         "task_id": task_id,
+        "step_id": "focus",
         "title": "选择审阅重点",
         "message": "这次希望审阅员重点检查什么？",
         "options": [
@@ -136,7 +168,13 @@ def choose_review_focus(state: ReviewState) -> dict[str, str]:
     focus = choice.get("value") if isinstance(choice, dict) else None
     if focus not in REVIEW_FOCUS:
         raise ValueError("无效的审阅重点")
-    return {"focus": focus}
+    workflow = update_workflow(
+        state["workflow"],
+        updates=[review_step("focus", "确定审阅重点", "complete", f"你选择了：{REVIEW_FOCUS[focus]}")],
+        additions=[review_step("review", "审阅方案", "running", f"正在重点检查：{REVIEW_FOCUS[focus]}")],
+    )
+    publish_workflow(workflow)
+    return {"focus": focus, "workflow": workflow}
 
 
 async def review_with_focus(state: ReviewState) -> dict:
@@ -153,14 +191,21 @@ async def review_with_focus(state: ReviewState) -> dict:
         )),
         HumanMessage(content=str(task)),
     ])
-    return {"messages": [answer]}
+    workflow = update_workflow(
+        state["workflow"],
+        updates=[review_step("review", "审阅方案", "complete", str(answer.content))],
+    )
+    await apublish_workflow(workflow)
+    return {"messages": [answer], "workflow": workflow}
 
 
 review_graph = (
     StateGraph(ReviewState)
+    .add_node("plan_review", plan_review)
     .add_node("choose_focus", choose_review_focus)
     .add_node("review", review_with_focus)
-    .add_edge(START, "choose_focus")
+    .add_edge(START, "plan_review")
+    .add_edge("plan_review", "choose_focus")
     .add_edge("choose_focus", "review")
     .add_edge("review", END)
     .compile()
@@ -171,6 +216,7 @@ agent = create_deep_agent(
     name="main-agent",
     middleware=[SelectedSubagentMiddleware(), TaskIdentityMiddleware(), CopilotKitMiddleware()],
     checkpointer=MemorySaver(),
+    state_schema=MainState,
     system_prompt=(
         "你是对话中的主 agent。直接回答简单问题。遇到需要独立梳理、分析或审阅的复杂任务时，"
         "调用 task 工具交给最合适的子 agent。给子 agent 明确、可执行的任务；"

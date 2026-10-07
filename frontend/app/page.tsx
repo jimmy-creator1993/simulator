@@ -1,11 +1,12 @@
 "use client";
 
-import { CopilotChat, useInterrupt, useRenderTool } from "@copilotkit/react-core/v2";
+import { CopilotChat, useAgent, useInterrupt, useRenderTool } from "@copilotkit/react-core/v2";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { parseSingleSelectInterrupt, SingleSelectCard, type SingleSelectInterrupt } from "./interrupt-card";
 import { MentionInput } from "./mention-input";
 import { WorkflowPanel, type WorkflowTask } from "./workflow-panel";
+import { acceptWorkflowSnapshot, parseWorkflowSnapshot, type WorkflowSnapshot } from "./workflow-model";
 
 const taskParameters = z.object({
   subagent_type: z.string().describe("子 agent 名称"),
@@ -100,10 +101,9 @@ function TaskCard({
       agent: agent || "子 agent",
       description: description || "正在接收任务…",
       status: taskStatus,
-      choice: selectedChoice,
       result,
     });
-  }, [workflow?.registerTask, toolCallId, agent, description, taskStatus, selectedChoice, result]);
+  }, [workflow?.registerTask, toolCallId, agent, description, taskStatus, result]);
 
   const expanded = workflow?.open && workflow.selectedId === toolCallId;
   return (
@@ -144,16 +144,18 @@ function TaskCard({
 }
 
 function Chat() {
+  const { agent, isReady } = useAgent({ agentId: "main_agent" });
   const [selectedChoices, setSelectedChoices] = useState<Record<string, string>>({});
   const [waitingTaskIds, setWaitingTaskIds] = useState<Record<string, boolean>>({});
   const [tasks, setTasks] = useState<Record<string, WorkflowTask>>({});
+  const [workflows, setWorkflows] = useState<Record<string, WorkflowSnapshot>>({});
   const [panel, setPanel] = useState<{ open: boolean; selectedId: string | null }>({ open: false, selectedId: null });
   const seenTaskIds = useRef(new Set<string>());
   const registerTask = useCallback((task: WorkflowTask) => {
     setTasks((current) => {
       const previous = current[task.id];
       if (previous && previous.agent === task.agent && previous.description === task.description
-        && previous.status === task.status && previous.choice === task.choice && previous.result === task.result) return current;
+        && previous.status === task.status && previous.result === task.result) return current;
       return { ...current, [task.id]: task };
     });
     if (!seenTaskIds.current.has(task.id)) {
@@ -161,6 +163,17 @@ function Chat() {
       setPanel({ open: true, selectedId: task.id });
     }
   }, []);
+  useEffect(() => {
+    if (!isReady) return;
+    const subscription = agent.subscribe({
+      onCustomEvent: ({ event }) => {
+        if (event.name !== "subagent_workflow") return;
+        const snapshot = parseWorkflowSnapshot(event.value);
+        if (snapshot) setWorkflows((current) => acceptWorkflowSnapshot(current, snapshot));
+      },
+    });
+    return () => subscription.unsubscribe();
+  }, [agent, isReady]);
   const toggleTask = useCallback((id: string) => {
     setPanel((current) => current.open && current.selectedId === id
       ? { ...current, open: false }
@@ -241,7 +254,7 @@ function Chat() {
             welcomeMessageText: "有什么可以帮你？",
           }}
         />
-        {panel.open && activeTask && <WorkflowPanel task={activeTask} onClose={() => setPanel((current) => ({ ...current, open: false }))} />}
+        {panel.open && activeTask && <WorkflowPanel task={activeTask} workflow={workflows[activeTask.id]} onClose={() => setPanel((current) => ({ ...current, open: false }))} />}
       </div>
     </WorkflowContext.Provider>
   );
