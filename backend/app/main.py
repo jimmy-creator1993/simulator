@@ -3,6 +3,7 @@
 import os
 import re
 import uuid
+from contextvars import ContextVar
 
 from ag_ui_langgraph import add_langgraph_fastapi_endpoint
 from copilotkit import CopilotKitMiddleware, LangGraphAGUIAgent
@@ -17,6 +18,7 @@ from langgraph.types import interrupt
 
 
 SUBAGENT_MENTION = re.compile(r"^\s*@(researcher|reviewer)(?:\s+|$)")
+CURRENT_TASK_ID: ContextVar[str | None] = ContextVar("current_task_id", default=None)
 
 
 class SelectedSubagentMiddleware(AgentMiddleware):
@@ -73,6 +75,30 @@ class SelectedSubagentMiddleware(AgentMiddleware):
         return self._selected_call(request) or await handler(request)
 
 
+class TaskIdentityMiddleware(AgentMiddleware):
+    """Keep each task tool call ID available to its nested subagent graph."""
+
+    name = "task_identity"
+
+    def wrap_tool_call(self, request, handler):
+        if request.tool_call["name"] != "task":
+            return handler(request)
+        token = CURRENT_TASK_ID.set(request.tool_call["id"])
+        try:
+            return handler(request)
+        finally:
+            CURRENT_TASK_ID.reset(token)
+
+    async def awrap_tool_call(self, request, handler):
+        if request.tool_call["name"] != "task":
+            return await handler(request)
+        token = CURRENT_TASK_ID.set(request.tool_call["id"])
+        try:
+            return await handler(request)
+        finally:
+            CURRENT_TASK_ID.reset(token)
+
+
 model = ChatOpenAI(
     model=os.getenv("OPENAI_MODEL", "deepseek-chat"),
     base_url=os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com"),
@@ -92,10 +118,14 @@ REVIEW_FOCUS = {
 
 
 def choose_review_focus(state: ReviewState) -> dict[str, str]:
+    task_id = CURRENT_TASK_ID.get()
+    if not task_id:
+        raise RuntimeError("审阅任务缺少调用 ID，无法安全地展示选择卡")
     choice = interrupt({
         "version": 1,
         "type": "single_select",
         "agent_id": "reviewer",
+        "task_id": task_id,
         "title": "选择审阅重点",
         "message": "这次希望审阅员重点检查什么？",
         "options": [
@@ -139,7 +169,7 @@ review_graph = (
 agent = create_deep_agent(
     model=model,
     name="main-agent",
-    middleware=[SelectedSubagentMiddleware(), CopilotKitMiddleware()],
+    middleware=[SelectedSubagentMiddleware(), TaskIdentityMiddleware(), CopilotKitMiddleware()],
     checkpointer=MemorySaver(),
     system_prompt=(
         "你是对话中的主 agent。直接回答简单问题。遇到需要独立梳理、分析或审阅的复杂任务时，"

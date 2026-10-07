@@ -41,7 +41,8 @@ function TaskInterrupt({
   onSelect: (value: string) => Promise<unknown>;
 }) {
   const task = useContext(InterruptTaskContext);
-  const matches = Boolean(task && task.agentId === interaction.agent_id && task.status !== "complete");
+  const matches = Boolean(task && task.toolCallId === interaction.task_id
+    && task.agentId === interaction.agent_id && task.status !== "complete");
   const taskId = task?.toolCallId;
   const markWaiting = task?.markWaiting;
 
@@ -144,7 +145,7 @@ function TaskCard({
 
 function Chat() {
   const [selectedChoices, setSelectedChoices] = useState<Record<string, string>>({});
-  const [waitingTaskId, setWaitingTaskId] = useState<string | null>(null);
+  const [waitingTaskIds, setWaitingTaskIds] = useState<Record<string, boolean>>({});
   const [tasks, setTasks] = useState<Record<string, WorkflowTask>>({});
   const [panel, setPanel] = useState<{ open: boolean; selectedId: string | null }>({ open: false, selectedId: null });
   const seenTaskIds = useRef(new Set<string>());
@@ -166,21 +167,31 @@ function Chat() {
       : { open: true, selectedId: id });
   }, []);
   const markWaiting = useCallback((id: string, waiting: boolean) => {
-    setWaitingTaskId((current) => waiting ? id : current === id ? null : current);
+    setWaitingTaskIds((current) => {
+      if (Boolean(current[id]) === waiting) return current;
+      const next = { ...current };
+      if (waiting) next[id] = true;
+      else delete next[id];
+      return next;
+    });
   }, []);
   const interruptCard = useInterrupt({
     agentId: "main_agent",
     renderInChat: false,
-    enabled: (event) => Boolean(parseSingleSelectInterrupt(event.value)),
-    render: ({ event, interrupt, resolve }) => {
-      const payload = parseSingleSelectInterrupt(event.value)
-        ?? parseSingleSelectInterrupt(interrupt);
-      if (!payload) return <></>;
+    render: ({ event, interrupts, resolve }) => {
+      const open = interrupts.length > 0
+        ? interrupts.map((interrupt) => ({ id: interrupt.id, payload: parseSingleSelectInterrupt(interrupt) }))
+        : [{ id: undefined, payload: parseSingleSelectInterrupt(event.value) }];
       return (
-        <TaskInterrupt
-          interaction={payload}
-          onSelect={(value) => resolve({ value })}
-        />
+        <>
+          {open.map(({ id, payload }) => payload && (
+            <TaskInterrupt
+              key={id ?? payload.task_id}
+              interaction={payload}
+              onSelect={(value) => resolve({ value }, id)}
+            />
+          ))}
+        </>
       );
     },
   });
@@ -210,12 +221,12 @@ function Chat() {
           result={textResult(result)}
           interruptCard={interruptCard}
           selectedChoice={selectedChoices[toolCallId]}
-          waitingForInput={waitingTaskId === toolCallId}
+          waitingForInput={Boolean(waitingTaskIds[toolCallId])}
         />
         </InterruptTaskContext.Provider>
       );
     },
-  }, [Boolean(interruptCard), selectedChoices, waitingTaskId]);
+  }, [Boolean(interruptCard), selectedChoices, waitingTaskIds]);
 
   const activeTask = panel.selectedId ? tasks[panel.selectedId] : undefined;
   return (

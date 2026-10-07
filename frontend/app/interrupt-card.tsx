@@ -7,6 +7,7 @@ const singleSelectSchema = z.object({
   version: z.literal(1),
   type: z.literal("single_select"),
   agent_id: z.string().min(1),
+  task_id: z.string().min(1),
   title: z.string().min(1),
   message: z.string().min(1),
   options: z.array(z.object({

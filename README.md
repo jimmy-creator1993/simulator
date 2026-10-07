@@ -17,7 +17,7 @@
 
 `reviewer` 是 LangGraph 子图。发送 `@reviewer 请审阅一个待上线的聊天应用方案` 后，子图会暂停并在子 agent 卡片内显示选择题；选择审阅重点后，CopilotKit 恢复同一线程，子 agent 完成审阅，再由主 agent 回复。当前选择记录保存在本页状态中，刷新页面不会保留该记录。
 
-选择题使用通用的 `single_select` interrupt 协议：`version`、`type`、`agent_id`、`title`、`message` 和 `options`（每项包含 `value`、`label`）。前端按类型渲染卡片并统一提交 `{ "value": "..." }`；各子 agent 自行解释和校验该值。当前卡片通过 `agent_id` 关联正在运行的任务；若同一 agent 并行执行多个任务，还需要增加任务实例标识来精确关联。
+选择题使用通用的 `single_select` interrupt 协议：`version`、`type`、`agent_id`、`task_id`、`title`、`message` 和 `options`（每项包含 `value`、`label`）。`task_id` 是 Deep Agents 的 `task` 工具调用 ID，由工具中间件传给子图，再随 interrupt 发给前端。前端用它把选择卡和工作流状态关联到准确的任务实例，并统一提交 `{ "value": "..." }`；各子 agent 自行解释和校验该值。多个标准 interrupt 同时打开时，前端按各自的 interrupt ID 分别提交选择。
 
 子 agent 开始执行时，右侧自动打开工作流。点击对话中的子 agent 卡片可收起或重新打开，点击工作流步骤可查看详情。`reviewer` 显示与当前 LangGraph 子图对应的接收任务、确定审阅重点、审阅方案和返回结果；其他子 agent 暂显示通用的执行步骤。步骤状态来自前端可观察到的任务调用、选择和完成事件，当前还没有展示子 agent 自行生成的动态规划。
 
