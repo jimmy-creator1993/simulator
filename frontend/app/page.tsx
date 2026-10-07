@@ -3,6 +3,7 @@
 import { CopilotChat, useInterrupt, useRenderTool } from "@copilotkit/react-core/v2";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { parseSingleSelectInterrupt, SingleSelectCard, type SingleSelectInterrupt } from "./interrupt-card";
 import { MentionInput } from "./mention-input";
 import { WorkflowPanel, type WorkflowTask } from "./workflow-panel";
 
@@ -17,16 +18,12 @@ function textResult(value: unknown): string {
   try { return JSON.stringify(value); } catch { return ""; }
 }
 
-type ReviewChoice = { id: string; label: string };
-type ReviewInterrupt = {
-  type: "review_focus";
-  message: string;
-  options: ReviewChoice[];
-};
-
-const ReviewTaskContext = createContext<{
+const InterruptTaskContext = createContext<{
   toolCallId: string;
+  agentId: string;
+  status: string;
   recordChoice: (toolCallId: string, label: string | null) => void;
+  markWaiting: (toolCallId: string, waiting: boolean) => void;
 } | null>(null);
 
 const WorkflowContext = createContext<{
@@ -36,67 +33,39 @@ const WorkflowContext = createContext<{
   open: boolean;
 } | null>(null);
 
-function isReviewInterrupt(value: unknown): value is ReviewInterrupt {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<ReviewInterrupt>;
-  return candidate.type === "review_focus"
-    && typeof candidate.message === "string"
-    && Array.isArray(candidate.options);
-}
-
-function reviewInterruptPayload(value: unknown): ReviewInterrupt | null {
-  if (typeof value === "string") {
-    try { value = JSON.parse(value); } catch { return null; }
-  }
-  if (isReviewInterrupt(value)) return value;
-  if (value && typeof value === "object" && "metadata" in value) {
-    const metadata = value.metadata as { langgraph?: { raw?: unknown } } | undefined;
-    return reviewInterruptPayload(metadata?.langgraph?.raw);
-  }
-  return null;
-}
-
-function ReviewChoiceCard({
-  question,
-  options,
-  onChoose,
+function TaskInterrupt({
+  interaction,
+  onSelect,
 }: {
-  question: string;
-  options: ReviewChoice[];
-  onChoose: (id: string) => Promise<unknown>;
+  interaction: SingleSelectInterrupt;
+  onSelect: (value: string) => Promise<unknown>;
 }) {
-  const task = useContext(ReviewTaskContext);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const task = useContext(InterruptTaskContext);
+  const matches = Boolean(task && task.agentId === interaction.agent_id && task.status !== "complete");
+  const taskId = task?.toolCallId;
+  const markWaiting = task?.markWaiting;
 
-  async function submit(choice: string) {
-    if (submitting) return;
-    setSubmitting(true);
-    setError("");
-    task?.recordChoice(task.toolCallId, options.find((option) => option.id === choice)?.label ?? choice);
+  useEffect(() => {
+    if (!matches || !taskId || !markWaiting) return;
+    markWaiting(taskId, true);
+    return () => markWaiting(taskId, false);
+  }, [matches, taskId, markWaiting]);
+
+  if (!matches || !task) return null;
+  async function select(value: string) {
+    if (!task) return;
+    task.recordChoice(task.toolCallId, interaction.options.find((option) => option.value === value)?.label ?? value);
     try {
-      await onChoose(choice);
+      await onSelect(value);
     } catch {
-      task?.recordChoice(task.toolCallId, null);
-      setError("提交失败，请重试。");
-      setSubmitting(false);
+      task.recordChoice(task.toolCallId, null);
+      throw new Error("提交失败");
     }
   }
-
   return (
-    <section className="interrupt-card" aria-label="审阅员需要你的选择">
-      <p className="interrupt-kicker">REVIEWER · 等待你的选择</p>
-      <strong>{question}</strong>
-      <div className="interrupt-options" role="group" aria-label={question}>
-        {options.map((option) => (
-          <button key={option.id} type="button" className="interrupt-option" disabled={submitting} onClick={() => submit(option.id)}>
-            {option.label}
-          </button>
-        ))}
-      </div>
-      {error && <p className="interrupt-error" role="alert">{error}</p>}
-      {submitting && <p className="interrupt-pending">正在继续…</p>}
-    </section>
+    <div className="card-interrupt">
+      <SingleSelectCard interaction={interaction} onSelect={select} />
+    </div>
   );
 }
 
@@ -106,20 +75,22 @@ function TaskCard({
   description,
   status,
   result,
-  reviewInterrupt,
-  reviewChoice,
+  interruptCard,
+  selectedChoice,
+  waitingForInput,
 }: {
   toolCallId: string;
   agent: string;
   description: string;
   status: string;
   result: string;
-  reviewInterrupt: React.ReactNode;
-  reviewChoice?: string;
+  interruptCard: React.ReactNode;
+  selectedChoice?: string;
+  waitingForInput: boolean;
 }) {
   const workflow = useContext(WorkflowContext);
   const done = status === "complete";
-  const waiting = !done && agent === "reviewer" && Boolean(reviewInterrupt) && !reviewChoice;
+  const waiting = !done && waitingForInput && !selectedChoice;
   const taskStatus: WorkflowTask["status"] = done ? "complete" : waiting ? "waiting" : "running";
 
   useEffect(() => {
@@ -128,10 +99,10 @@ function TaskCard({
       agent: agent || "子 agent",
       description: description || "正在接收任务…",
       status: taskStatus,
-      choice: reviewChoice,
+      choice: selectedChoice,
       result,
     });
-  }, [workflow?.registerTask, toolCallId, agent, description, taskStatus, reviewChoice, result]);
+  }, [workflow?.registerTask, toolCallId, agent, description, taskStatus, selectedChoice, result]);
 
   const expanded = workflow?.open && workflow.selectedId === toolCallId;
   return (
@@ -157,10 +128,10 @@ function TaskCard({
         <span className="card-label">任务</span>
         <p title={description}>{description || "正在接收任务…"}</p>
       </div>
-      {agent === "reviewer" && reviewChoice && (
-        <div className="card-choice">你选择了：{reviewChoice}</div>
+      {selectedChoice && (
+        <div className="card-choice">你选择了：{selectedChoice}</div>
       )}
-      {waiting && <div className="card-interrupt">{reviewInterrupt}</div>}
+      {!done && interruptCard}
       {done && result && (
         <details className="card-section result-section">
           <summary>查看子 agent 返回结果</summary>
@@ -172,7 +143,8 @@ function TaskCard({
 }
 
 function Chat() {
-  const [reviewChoices, setReviewChoices] = useState<Record<string, string>>({});
+  const [selectedChoices, setSelectedChoices] = useState<Record<string, string>>({});
+  const [waitingTaskId, setWaitingTaskId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Record<string, WorkflowTask>>({});
   const [panel, setPanel] = useState<{ open: boolean; selectedId: string | null }>({ open: false, selectedId: null });
   const seenTaskIds = useRef(new Set<string>());
@@ -193,19 +165,21 @@ function Chat() {
       ? { ...current, open: false }
       : { open: true, selectedId: id });
   }, []);
-  const reviewInterrupt = useInterrupt({
+  const markWaiting = useCallback((id: string, waiting: boolean) => {
+    setWaitingTaskId((current) => waiting ? id : current === id ? null : current);
+  }, []);
+  const interruptCard = useInterrupt({
     agentId: "main_agent",
     renderInChat: false,
-    enabled: (event) => Boolean(reviewInterruptPayload(event.value)),
+    enabled: (event) => Boolean(parseSingleSelectInterrupt(event.value)),
     render: ({ event, interrupt, resolve }) => {
-      const payload = reviewInterruptPayload(event.value)
-        ?? reviewInterruptPayload(interrupt);
+      const payload = parseSingleSelectInterrupt(event.value)
+        ?? parseSingleSelectInterrupt(interrupt);
       if (!payload) return <></>;
       return (
-        <ReviewChoiceCard
-          question={payload.message}
-          options={payload.options}
-          onChoose={(focus) => resolve({ focus })}
+        <TaskInterrupt
+          interaction={payload}
+          onSelect={(value) => resolve({ value })}
         />
       );
     },
@@ -216,9 +190,12 @@ function Chat() {
     parameters: taskParameters,
     render: ({ status, parameters, result, toolCallId }) => {
       return (
-        <ReviewTaskContext.Provider value={{
+        <InterruptTaskContext.Provider value={{
           toolCallId,
-          recordChoice: (id, label) => setReviewChoices((current) => {
+          agentId: parameters.subagent_type ?? "",
+          status,
+          markWaiting,
+          recordChoice: (id, label) => setSelectedChoices((current) => {
             const next = { ...current };
             if (label === null) delete next[id];
             else next[id] = label;
@@ -231,13 +208,14 @@ function Chat() {
           description={parameters.description ?? ""}
           status={status}
           result={textResult(result)}
-          reviewInterrupt={reviewInterrupt}
-          reviewChoice={reviewChoices[toolCallId]}
+          interruptCard={interruptCard}
+          selectedChoice={selectedChoices[toolCallId]}
+          waitingForInput={waitingTaskId === toolCallId}
         />
-        </ReviewTaskContext.Provider>
+        </InterruptTaskContext.Provider>
       );
     },
-  }, [Boolean(reviewInterrupt), reviewChoices]);
+  }, [Boolean(interruptCard), selectedChoices, waitingTaskId]);
 
   const activeTask = panel.selectedId ? tasks[panel.selectedId] : undefined;
   return (

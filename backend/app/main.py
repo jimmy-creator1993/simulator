@@ -93,14 +93,17 @@ REVIEW_FOCUS = {
 
 def choose_review_focus(state: ReviewState) -> dict[str, str]:
     choice = interrupt({
-        "type": "review_focus",
+        "version": 1,
+        "type": "single_select",
+        "agent_id": "reviewer",
+        "title": "选择审阅重点",
         "message": "这次希望审阅员重点检查什么？",
         "options": [
-            {"id": option_id, "label": label}
+            {"value": option_id, "label": label}
             for option_id, label in REVIEW_FOCUS.items()
         ],
     })
-    focus = choice.get("focus") if isinstance(choice, dict) else choice
+    focus = choice.get("value") if isinstance(choice, dict) else None
     if focus not in REVIEW_FOCUS:
         raise ValueError("无效的审阅重点")
     return {"focus": focus}
