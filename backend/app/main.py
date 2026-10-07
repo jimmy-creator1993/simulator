@@ -3,7 +3,7 @@
 import os
 import re
 import uuid
-from typing import Annotated, NotRequired
+from typing import Annotated, Iterable, NotRequired
 
 from ag_ui_langgraph import add_langgraph_fastapi_endpoint
 from copilotkit import CopilotKitMiddleware, LangGraphAGUIAgent
@@ -29,16 +29,21 @@ from app.report_agent import report_graph
 from app.task_context import CURRENT_TASK_ID
 
 
-SUBAGENT_MENTION = re.compile(r"^\s*@(researcher|reviewer|report_agent)(?:\s+|$)")
-
-
 class SelectedSubagentMiddleware(AgentMiddleware):
     """Turn an explicit @mention into a real task tool call before model choice."""
 
     name = "selected_subagent"
 
-    @staticmethod
-    def _selected_call(request: ModelRequest) -> AIMessage | None:
+    def __init__(self, agent_names: Iterable[str]) -> None:
+        names = set(agent_names)
+        if not names or any(not name for name in names):
+            raise ValueError("子 agent 名称不能为空")
+        alternatives = "|".join(
+            re.escape(name) for name in sorted(names, key=lambda name: (-len(name), name))
+        )
+        self._mention_pattern = re.compile(rf"^\s*@({alternatives})(?:\s+|$)")
+
+    def _selected_call(self, request: ModelRequest) -> AIMessage | None:
         messages = request.messages
         user_index = next(
             (index for index in range(len(messages) - 1, -1, -1)
@@ -51,7 +56,7 @@ class SelectedSubagentMiddleware(AgentMiddleware):
         content = messages[user_index].content
         if not isinstance(content, str):
             return None
-        match = SUBAGENT_MENTION.match(content)
+        match = self._mention_pattern.match(content)
         if match is None:
             return None
 
@@ -212,40 +217,46 @@ review_graph = (
     .compile()
 )
 
+subagents = [
+    {
+        "name": "researcher",
+        "description": "梳理一个主题的事实、背景和关键要点；适合资料整理与方案调研。",
+        "system_prompt": (
+            "你是研究子 agent。只处理收到的任务。输出简短的工作摘要："
+            "已检查的要点、主要发现、仍不确定的内容。不要编造来源，也不要输出内部推理过程。"
+        ),
+        "tools": [],
+    },
+    CompiledSubAgent(
+        name="reviewer",
+        description="审阅一个方案，找出重要问题、权衡与可执行的改进建议。",
+        runnable=review_graph,
+    ),
+    CompiledSubAgent(
+        name="report_agent",
+        description="为报表设置多字段排序规则，并请用户确定字段优先级与升降序。",
+        runnable=report_graph,
+    ),
+]
+
 agent = create_deep_agent(
     model=model,
     name="main-agent",
-    middleware=[SelectedSubagentMiddleware(), TaskIdentityMiddleware(), CopilotKitMiddleware()],
+    middleware=[
+        SelectedSubagentMiddleware(subagent["name"] for subagent in subagents),
+        TaskIdentityMiddleware(),
+        CopilotKitMiddleware(),
+    ],
     checkpointer=MemorySaver(),
     state_schema=MainState,
     system_prompt=(
         "你是对话中的主 agent。直接回答简单问题。遇到需要独立梳理、分析或审阅的复杂任务时，"
         "调用 task 工具交给最合适的子 agent。给子 agent 明确、可执行的任务；"
-        "收到结果后整合成简洁的中文答复。以 @researcher、@reviewer 或 @report_agent 开头的消息"
-        "由系统直接委派给对应子 agent；看到该 task 结果后直接整合回答，"
+        "收到结果后整合成简洁的中文答复。用户消息以 @ 加已注册的子 agent 名称开头时，"
+        "系统会直接委派给对应子 agent；看到该 task 结果后直接整合回答，"
         "不要重复委派同一任务。不要声称展示了模型内部的逐字推理。"
     ),
-    subagents=[
-        {
-            "name": "researcher",
-            "description": "梳理一个主题的事实、背景和关键要点；适合资料整理与方案调研。",
-            "system_prompt": (
-                "你是研究子 agent。只处理收到的任务。输出简短的工作摘要："
-                "已检查的要点、主要发现、仍不确定的内容。不要编造来源，也不要输出内部推理过程。"
-            ),
-            "tools": [],
-        },
-        CompiledSubAgent(
-            name="reviewer",
-            description="审阅一个方案，找出重要问题、权衡与可执行的改进建议。",
-            runnable=review_graph,
-        ),
-        CompiledSubAgent(
-            name="report_agent",
-            description="为报表设置多字段排序规则，并请用户确定字段优先级与升降序。",
-            runnable=report_graph,
-        ),
-    ],
+    subagents=subagents,
 )
 
 class MultiInterruptAGUIAgent(LangGraphAGUIAgent):
