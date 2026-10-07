@@ -196,15 +196,35 @@ agent = create_deep_agent(
     ],
 )
 
+class MultiInterruptAGUIAgent(LangGraphAGUIAgent):
+    """Expose structured interrupts while preserving flags across request clones."""
+
+    def __init__(
+        self,
+        *,
+        name,
+        graph,
+        description=None,
+        config=None,
+        enable_legacy_on_interrupt_event=False,
+        emit_interrupt_outcome=True,
+    ):
+        super().__init__(name=name, graph=graph, description=description, config=config)
+        self.enable_legacy_on_interrupt_event = enable_legacy_on_interrupt_event
+        self.emit_interrupt_outcome = emit_interrupt_outcome
+
+
 app = FastAPI(title="Deep Agent Chat")
+
+agui_agent = MultiInterruptAGUIAgent(
+    name="main_agent",
+    description="可委派研究和审阅任务的主 agent",
+    graph=agent,
+)
 
 add_langgraph_fastapi_endpoint(
     app=app,
-    agent=LangGraphAGUIAgent(
-        name="main_agent",
-        description="可委派研究和审阅任务的主 agent",
-        graph=agent,
-    ),
+    agent=agui_agent,
     path="/",
 )
 
