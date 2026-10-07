@@ -102,9 +102,9 @@ body { font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: 
 .field-order-picker { position: relative; margin-top: 10px; }
 .field-order-add { width: 100%; padding: 10px; border: 1px dashed #a9ceb2; border-radius: 9px; background: #fafffa; color: #377651; font-size: 12px; font-weight: 700; cursor: pointer; }
 .field-order-add:hover { background: #eaf6ec; }
-.field-order-options { position: absolute; z-index: 20; top: calc(100% + 5px); left: 0; width: min(320px, 100%); padding: 8px; border: 1px solid #cfe2d2; border-radius: 11px; background: white; box-shadow: 0 12px 32px #24482a2b; }
+.field-order-options { width: 100%; margin-top: 6px; padding: 8px; border: 1px solid #cfe2d2; border-radius: 11px; background: white; box-shadow: 0 4px 12px #24482a12; }
 .field-order-options input { width: 100%; padding: 9px 10px; border: 1px solid #dbe7dd; border-radius: 7px; outline-color: #78b58b; font-size: 12px; }
-.field-order-options-list { max-height: 190px; margin-top: 6px; overflow: auto; }
+.field-order-options-list { max-height: 190px; margin-top: 6px; overflow-y: auto; scrollbar-gutter: stable; }
 .field-order-options-list button { display: flex; justify-content: space-between; width: 100%; padding: 9px 10px; border: 0; border-radius: 7px; background: white; color: #344c3a; text-align: left; font-size: 12px; cursor: pointer; }
 .field-order-options-list button:hover { background: #eef7ef; }
 .field-order-options-list button span:last-child { color: #4b8d60; }

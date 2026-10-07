@@ -217,6 +217,10 @@ review_graph = (
     .compile()
 )
 
+# CopilotKit renders model text from nested graphs as chat messages by default.
+# Keep subagent progress in the task card/workflow and let the main agent reply.
+SUBAGENT_MESSAGE_CONFIG = {"metadata": {"copilotkit:emit-messages": False}}
+
 subagents = [
     {
         "name": "researcher",
@@ -238,6 +242,9 @@ subagents = [
         runnable=report_graph,
     ),
 ]
+for subagent in subagents:
+    if "runnable" in subagent:
+        subagent["runnable"] = subagent["runnable"].with_config(SUBAGENT_MESSAGE_CONFIG)
 
 agent = create_deep_agent(
     model=model,
