@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { z } from "zod";
+import { FieldOrderCard, type FieldOrderItem } from "./field-order-card";
 
 const singleSelectSchema = z.object({
   version: z.literal(1),
   type: z.literal("single_select"),
   agent_id: z.string().min(1),
   task_id: z.string().min(1),
+  step_id: z.string().min(1).optional(),
   title: z.string().min(1),
   message: z.string().min(1),
   options: z.array(z.object({
@@ -16,19 +18,58 @@ const singleSelectSchema = z.object({
   })).min(1),
 });
 
-export type SingleSelectInterrupt = z.infer<typeof singleSelectSchema>;
+const fieldOrderSchema = z.object({
+  version: z.literal(1),
+  type: z.literal("field_order"),
+  agent_id: z.string().min(1),
+  task_id: z.string().min(1),
+  step_id: z.string().min(1).optional(),
+  title: z.string().min(1),
+  message: z.string().min(1),
+  fields: z.array(z.object({
+    value: z.string().min(1),
+    label: z.string().min(1),
+  })).min(1),
+}).refine((value) => new Set(value.fields.map((field) => field.value)).size === value.fields.length);
 
-export function parseSingleSelectInterrupt(value: unknown): SingleSelectInterrupt | null {
+export type SingleSelectInterrupt = z.infer<typeof singleSelectSchema>;
+export type FieldOrderInterrupt = z.infer<typeof fieldOrderSchema>;
+export type AgentInterrupt = SingleSelectInterrupt | FieldOrderInterrupt;
+
+export function parseAgentInterrupt(value: unknown): AgentInterrupt | null {
   if (typeof value === "string") {
     try { value = JSON.parse(value); } catch { return null; }
   }
-  const parsed = singleSelectSchema.safeParse(value);
-  if (parsed.success) return parsed.data;
+  const singleSelect = singleSelectSchema.safeParse(value);
+  if (singleSelect.success) return singleSelect.data;
+  const fieldOrder = fieldOrderSchema.safeParse(value);
+  if (fieldOrder.success) return fieldOrder.data;
   if (value && typeof value === "object" && "metadata" in value) {
     const metadata = value.metadata as { langgraph?: { raw?: unknown } } | undefined;
-    return parseSingleSelectInterrupt(metadata?.langgraph?.raw);
+    return parseAgentInterrupt(metadata?.langgraph?.raw);
   }
   return null;
+}
+
+export function InterruptCard({
+  interaction,
+  onResolve,
+}: {
+  interaction: AgentInterrupt;
+  onResolve: (value: string | FieldOrderItem[]) => Promise<unknown>;
+}) {
+  if (interaction.type === "field_order") {
+    return (
+      <FieldOrderCard
+        agentId={interaction.agent_id}
+        title={interaction.title}
+        message={interaction.message}
+        fields={interaction.fields}
+        onConfirm={async (value) => { await onResolve(value); }}
+      />
+    );
+  }
+  return <SingleSelectCard interaction={interaction} onSelect={(value) => onResolve(value)} />;
 }
 
 export function SingleSelectCard({

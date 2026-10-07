@@ -9,6 +9,7 @@ type InputProps = ComponentProps<typeof CopilotChatInput>;
 const agents = [
   { id: "researcher", label: "研究员", description: "梳理主题、整理要点" },
   { id: "reviewer", label: "审阅员", description: "检查方案、提出改进" },
+  { id: "report_agent", label: "报表排序", description: "设置字段优先级与升降序" },
 ] as const;
 
 function MentionInputBase(props: InputProps) {

@@ -78,3 +78,42 @@ body { font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: 
 .workflow-note { margin: auto 0 0; padding-top: 24px; color: #98a79c; font-size: 11px; line-height: 1.5; }
 @media (max-width: 900px) { .workspace.with-workflow { display: block; width: min(100%, 840px); } .workflow-panel { position: fixed; z-index: 80; top: 10px; right: 10px; bottom: 10px; width: min(380px, calc(100vw - 20px)); } }
 @media (max-width: 600px) { .shell { padding: 10px; } .workspace { height: calc(100dvh - 20px); min-height: 460px; } .chat-panel { border-radius: 14px; } .card-workflow-hint { display: none; } }
+
+.field-order-card { position: relative; margin: 0 15px 15px; padding: 17px; border: 1px solid #cadfce; border-radius: 14px; background: #f4faf5; box-shadow: 0 4px 14px #26452d0e; }
+.card-interrupt .field-order-card { margin: 0; }
+.field-order-heading { display: flex; align-items: center; gap: 11px; }
+.field-order-symbol { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border-radius: 9px; background: #dceee0; color: #347550; font-size: 18px; font-weight: 700; }
+.field-order-kicker { margin: 0 0 3px; color: #5d8869; font-size: 10px; font-weight: 700; }
+.field-order-heading h2 { margin: 0; color: #254a33; font-size: 15px; }
+.field-order-count { margin-left: auto; white-space: nowrap; color: #789180; font-size: 11px; }
+.field-order-message { margin: 14px 0 17px; color: #53685a; font-size: 12px; line-height: 1.65; }
+.field-order-list-label { display: flex; justify-content: space-between; margin: 0 0 9px; color: #447453; font-size: 11px; font-weight: 800; }
+.field-order-list-label span { color: #95a69a; font-weight: 400; }
+.field-order-list { display: grid; gap: 7px; max-height: 264px; margin: 0; padding: 0 2px 0 0; overflow: auto; list-style: none; }
+.field-order-row { display: grid; grid-template-columns: 25px minmax(65px, 1fr) 99px 96px; align-items: center; gap: 7px; min-height: 44px; padding: 5px 8px; border: 1px solid #dceadd; border-radius: 10px; background: white; }
+.field-order-rank { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 6px; background: #edf5ed; color: #4f8060; font-size: 11px; font-weight: 800; }
+.field-order-field { overflow: hidden; color: #293d2e; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.field-order-direction { width: 100%; padding: 6px 5px; border: 1px solid #dbe7dc; border-radius: 7px; background: #fff; color: #3c6250; font-size: 11px; cursor: pointer; }
+.field-order-row-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.field-order-row-actions button { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #678672; font-size: 15px; cursor: pointer; }
+.field-order-row-actions button:hover:not(:disabled) { background: #e9f3ea; color: #2e7952; }
+.field-order-row-actions button:disabled { opacity: .3; cursor: default; }
+.field-order-empty { padding: 21px 12px; border: 1px dashed #cddfce; border-radius: 9px; color: #8ea194; text-align: center; font-size: 12px; }
+.field-order-picker { position: relative; margin-top: 10px; }
+.field-order-add { width: 100%; padding: 10px; border: 1px dashed #a9ceb2; border-radius: 9px; background: #fafffa; color: #377651; font-size: 12px; font-weight: 700; cursor: pointer; }
+.field-order-add:hover { background: #eaf6ec; }
+.field-order-options { position: absolute; z-index: 20; top: calc(100% + 5px); left: 0; width: min(320px, 100%); padding: 8px; border: 1px solid #cfe2d2; border-radius: 11px; background: white; box-shadow: 0 12px 32px #24482a2b; }
+.field-order-options input { width: 100%; padding: 9px 10px; border: 1px solid #dbe7dd; border-radius: 7px; outline-color: #78b58b; font-size: 12px; }
+.field-order-options-list { max-height: 190px; margin-top: 6px; overflow: auto; }
+.field-order-options-list button { display: flex; justify-content: space-between; width: 100%; padding: 9px 10px; border: 0; border-radius: 7px; background: white; color: #344c3a; text-align: left; font-size: 12px; cursor: pointer; }
+.field-order-options-list button:hover { background: #eef7ef; }
+.field-order-options-list button span:last-child { color: #4b8d60; }
+.field-order-options-list p { margin: 0; padding: 11px; color: #8a9a8c; font-size: 12px; }
+.field-order-footer { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-top: 14px; padding-top: 13px; border-top: 1px solid #deebdf; }
+.field-order-footer span { min-width: 0; overflow: hidden; color: #829488; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.field-order-footer button { flex: 0 0 auto; padding: 9px 14px; border: 0; border-radius: 8px; background: #358055; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
+.field-order-footer button:hover:not(:disabled) { background: #286e47; }
+.field-order-footer button:disabled { opacity: .5; cursor: default; }
+.field-order-error { margin: 9px 0 0; color: #ad3d36; font-size: 11px; }
+.field-order-summary { margin: 14px 0 0; color: #386f4b; font-size: 12px; line-height: 1.6; }
+@media (max-width: 600px) { .field-order-card { padding: 12px; } .field-order-row { grid-template-columns: 20px minmax(50px, 1fr) 83px 74px; gap: 4px; padding: 4px; } .field-order-row-actions button { width: 23px; } .field-order-direction { font-size: 10px; } }

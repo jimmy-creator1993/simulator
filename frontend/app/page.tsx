@@ -3,7 +3,8 @@
 import { CopilotChat, useAgent, useInterrupt, useRenderTool } from "@copilotkit/react-core/v2";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { parseSingleSelectInterrupt, SingleSelectCard, type SingleSelectInterrupt } from "./interrupt-card";
+import { InterruptCard, parseAgentInterrupt, type AgentInterrupt } from "./interrupt-card";
+import type { FieldOrderItem } from "./field-order-card";
 import { MentionInput } from "./mention-input";
 import { WorkflowPanel, type WorkflowTask } from "./workflow-panel";
 import { acceptWorkflowSnapshot, parseWorkflowSnapshot, type WorkflowSnapshot } from "./workflow-model";
@@ -36,10 +37,10 @@ const WorkflowContext = createContext<{
 
 function TaskInterrupt({
   interaction,
-  onSelect,
+  onResolve,
 }: {
-  interaction: SingleSelectInterrupt;
-  onSelect: (value: string) => Promise<unknown>;
+  interaction: AgentInterrupt;
+  onResolve: (value: string | FieldOrderItem[]) => Promise<unknown>;
 }) {
   const task = useContext(InterruptTaskContext);
   const matches = Boolean(task && task.toolCallId === interaction.task_id
@@ -54,11 +55,16 @@ function TaskInterrupt({
   }, [matches, taskId, markWaiting]);
 
   if (!matches || !task) return null;
-  async function select(value: string) {
+  async function submit(value: string | FieldOrderItem[]) {
     if (!task) return;
-    task.recordChoice(task.toolCallId, interaction.options.find((option) => option.value === value)?.label ?? value);
+    const label = interaction.type === "single_select" && typeof value === "string"
+      ? interaction.options.find((option) => option.value === value)?.label ?? value
+      : Array.isArray(value) && interaction.type === "field_order"
+        ? value.map((item) => `${interaction.fields.find((field) => field.value === item.field)?.label ?? item.field} ${item.direction === "asc" ? "↑" : "↓"}`).join(" → ")
+        : "";
+    task.recordChoice(task.toolCallId, label);
     try {
-      await onSelect(value);
+      await onResolve(value);
     } catch {
       task.recordChoice(task.toolCallId, null);
       throw new Error("提交失败");
@@ -66,7 +72,7 @@ function TaskInterrupt({
   }
   return (
     <div className="card-interrupt">
-      <SingleSelectCard interaction={interaction} onSelect={select} />
+      <InterruptCard interaction={interaction} onResolve={submit} />
     </div>
   );
 }
@@ -193,15 +199,15 @@ function Chat() {
     renderInChat: false,
     render: ({ event, interrupts, resolve }) => {
       const open = interrupts.length > 0
-        ? interrupts.map((interrupt) => ({ id: interrupt.id, payload: parseSingleSelectInterrupt(interrupt) }))
-        : [{ id: undefined, payload: parseSingleSelectInterrupt(event.value) }];
+        ? interrupts.map((interrupt) => ({ id: interrupt.id, payload: parseAgentInterrupt(interrupt) }))
+        : [{ id: undefined, payload: parseAgentInterrupt(event.value) }];
       return (
         <>
           {open.map(({ id, payload }) => payload && (
             <TaskInterrupt
               key={id ?? payload.task_id}
               interaction={payload}
-              onSelect={(value) => resolve({ value }, id)}
+              onResolve={(value) => resolve({ value }, id)}
             />
           ))}
         </>

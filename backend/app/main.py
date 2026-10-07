@@ -3,7 +3,6 @@
 import os
 import re
 import uuid
-from contextvars import ContextVar
 from typing import Annotated, NotRequired
 
 from ag_ui_langgraph import add_langgraph_fastapi_endpoint
@@ -26,10 +25,11 @@ from app.workflow import (
     start_workflow,
     update_workflow,
 )
+from app.report_agent import report_graph
+from app.task_context import CURRENT_TASK_ID
 
 
-SUBAGENT_MENTION = re.compile(r"^\s*@(researcher|reviewer)(?:\s+|$)")
-CURRENT_TASK_ID: ContextVar[str | None] = ContextVar("current_task_id", default=None)
+SUBAGENT_MENTION = re.compile(r"^\s*@(researcher|reviewer|report_agent)(?:\s+|$)")
 
 
 class SelectedSubagentMiddleware(AgentMiddleware):
@@ -120,6 +120,7 @@ model = ChatOpenAI(
 class MainState(DeepAgentState):
     # Deep Agents must not copy a subagent's workflow into the main agent state.
     workflow: NotRequired[Annotated[WorkflowSnapshot, PrivateStateAttr]]
+    sort_order: NotRequired[Annotated[list[dict[str, str]], PrivateStateAttr]]
 
 
 class ReviewState(MessagesState):
@@ -220,7 +221,7 @@ agent = create_deep_agent(
     system_prompt=(
         "你是对话中的主 agent。直接回答简单问题。遇到需要独立梳理、分析或审阅的复杂任务时，"
         "调用 task 工具交给最合适的子 agent。给子 agent 明确、可执行的任务；"
-        "收到结果后整合成简洁的中文答复。以 @researcher 或 @reviewer 开头的消息"
+        "收到结果后整合成简洁的中文答复。以 @researcher、@reviewer 或 @report_agent 开头的消息"
         "由系统直接委派给对应子 agent；看到该 task 结果后直接整合回答，"
         "不要重复委派同一任务。不要声称展示了模型内部的逐字推理。"
     ),
@@ -238,6 +239,11 @@ agent = create_deep_agent(
             name="reviewer",
             description="审阅一个方案，找出重要问题、权衡与可执行的改进建议。",
             runnable=review_graph,
+        ),
+        CompiledSubAgent(
+            name="report_agent",
+            description="为报表设置多字段排序规则，并请用户确定字段优先级与升降序。",
+            runnable=report_graph,
         ),
     ],
 )
