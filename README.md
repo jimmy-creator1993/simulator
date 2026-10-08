@@ -30,3 +30,31 @@ AG-UI 事件出口只过滤子 agent 内部的文本消息，保留主 agent 的
 当前工作流快照在浏览器中随自定义事件更新；页面刷新后不会从历史记录重新构建已完成任务的详细步骤。子图 state 保存运行中的最新快照，以支持该次任务在 interrupt 后继续更新。
 
 此原型的会话状态使用内存 checkpointer，服务器重启后不会保留。
+
+## 自动化回归测试
+
+在 `backend` 执行：
+
+```sh
+uv sync --extra test
+uv run --extra test python -m pytest -q
+```
+
+也可用 Python 3.12+ 的虚拟环境执行 `python -m pip install -e ".[test]"`，
+再执行 `python -m pytest -q`。不需要 `.env` 或模型 API key；测试禁止 socket 网络连接。
+
+测试使用真实 CopilotKit / AG-UI 分发逻辑和模拟事件，覆盖子 agent 的文本、推理、
+加密推理及 chunk，跨子 agent 窗口的消息 ID 配对、主 agent 完整回复、
+手动消息事件的归属过滤，以及工作流、工具调用结果和多个 interrupt 的事件透传。
+另用无模型 LangGraph 验证工作流发布、两种选择协议的暂停与恢复，
+并检查每次请求 clone 后的 interrupt 开关及过滤状态隔离。
+
+`MultiInterruptAGUIAgent` 位于 `app/agui_agent.py`，由 `app.main` 导入，
+便于独立测试而不初始化模型。过滤行为及应用入口保持一致。
+GitHub Actions 在相关 push / PR 上执行同一命令并记录安装版本。
+仓库目前没有依赖锁文件，CI 解析现有依赖范围内的版本，因此也会暴露上游接口不兼容。
+
+覆盖边界：这些测试验证后端事件输出，不验证浏览器中的实际渲染、HTTP/SSE 传输、
+真实模型输出、Deep Agents 自动识别子 agent 窗口、并发嵌套委派或历史快照重建。
+interrupt 集成测试使用小型确定性图；多个 interrupt 的覆盖目前限于事件透传，
+未覆盖并行任务的逐个恢复。
